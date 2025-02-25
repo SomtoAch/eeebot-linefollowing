@@ -1,0 +1,192 @@
+// define variables and pins, import libraries
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
+#define I2C_SLAVE_ADDR 0x04 //the slave microcontroller will be at address 4
+
+// these will hold the readings from each sensor whilst over a black line, and will be the lower values in costrain and map
+float sensor_1_min_read, sensor_2_min_read, sensor_3_min_read, sensor_4_min_read;
+
+// these will hold the readings from each sensor whilst over a white surface, and will be the upper values in costrain and map
+float sensor_1_max_read, sensor_2_max_read, sensor_3_max_read, sensor_4_max_read;
+
+// these will hold the values used to represent each sensor's reading and that are fed into our formula
+float sensor_1_value, sensor_2_value, sensor_3_value, sensor_4_value;
+
+// the photodiodes are connected to these GPIO pins
+const int photodiode_1 = 36;
+const int photodiode_2 = 39;
+const int photodiode_3 = 34;
+const int photodiode_4 = 35;
+
+const int rear_left_LED = 13;
+const int rear_right_LED = 2;
+
+// during setup i need to find out wht readings each sensor reads when over a black line, and when over a white surface.
+// these values will be used to constrain the photodiodes' readings and map the range between them to a range that is common for every photodiode
+// this will standardise the reading s from all photodiodes so we should get the same final value from each when over a black line or white surface
+
+// the user should place the car in a way such that the sensor array is over the black, but if the the car moves forward it will not be. This is exactly what will happen.
+
+void setup() {
+  // put your setup code here, to run once:
+
+  Serial.begin(115200); //Start serial communication on the 115200 baud setting
+  Wire.begin();
+
+  // set the photodiodes as input connections
+  pinMode(photodiode_1, INPUT);
+  pinMode(photodiode_2, INPUT);
+  pinMode(photodiode_3, INPUT);
+  pinMode(photodiode_4, INPUT);
+
+  // set the LEDs as output connections
+  pinMode(rear_left_LED, OUTPUT);
+  pinMode(rear_right_LED, OUTPUT);
+
+  // give the user 2 seconds to place the car over a black line
+  delay(2000);
+
+  sensor_1_min_read = getAverageReading(photodiode_1, 100);
+  sensor_2_min_read = getAverageReading(photodiode_2, 100);
+  sensor_3_min_read = getAverageReading(photodiode_3, 100);
+  sensor_4_min_read = getAverageReading(photodiode_4, 100);
+
+  Serial.print("When over a black line, photodiode 1 reads: ");
+  Serial.println(sensor_1_min_read);
+  Serial.print("When over a black line, photodiode 2 reads: ");
+  Serial.println(sensor_2_min_read);
+  Serial.print("When over a black line, photodiode 3 reads: ");
+  Serial.println(sensor_3_min_read);
+  Serial.print("When over a black line, photodiode 4 reads: ");
+  Serial.println(sensor_4_min_read);
+
+  delay(25);
+
+  analogWrite(rear_left_LED, 255);
+  analogWrite(rear_right_LED, 255);
+
+  delay(1000);
+
+  analogWrite(rear_left_LED, 0);
+  analogWrite(rear_right_LED, 0);
+
+  // user should now move the robot to over a white surface
+  delay(2000);
+
+  sensor_1_max_read = getAverageReading(photodiode_1, 100);
+  sensor_2_max_read = getAverageReading(photodiode_2, 100);
+  sensor_3_max_read = getAverageReading(photodiode_3, 100);
+  sensor_4_max_read = getAverageReading(photodiode_4, 100);
+
+  Serial.print("When over a white surface, photodiode 1 reads: ");
+  Serial.println(sensor_1_max_read);
+  Serial.print("When over a white surface, photodiode 2 reads: ");
+  Serial.println(sensor_2_max_read);
+  Serial.print("When over a white surface, photodiode 3 reads: ");
+  Serial.println(sensor_3_max_read);
+  Serial.print("When over a white surface, photodiode 4 reads: ");
+  Serial.println(sensor_4_max_read);
+
+  delay(25);
+
+  // calibration done, ending LED sequence
+  analogWrite(rear_left_LED, 255);
+  analogWrite(rear_right_LED, 0);
+  delay(250);
+  analogWrite(rear_left_LED, 0);
+  analogWrite(rear_right_LED, 255);
+  delay(250);
+  analogWrite(rear_left_LED, 255);
+  analogWrite(rear_right_LED, 0);
+  delay(250);
+  analogWrite(rear_left_LED, 0);
+  analogWrite(rear_right_LED, 255);
+  delay(250);
+  analogWrite(rear_left_LED, 0);
+  analogWrite(rear_right_LED, 0);
+
+  // user has 2 seconds to put over line
+  delay(2000);
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  sensor_1_value = analogRead(photodiode_1);
+  sensor_2_value = analogRead(photodiode_2);
+  sensor_3_value = analogRead(photodiode_3);
+  sensor_4_value = analogRead(photodiode_4);
+
+  Serial.print("The raw sensor 1 read is: ");
+  Serial.println(sensor_1_value);
+  Serial.print("The raw sensor 2 read is: ");
+  Serial.println(sensor_2_value);
+  Serial.print("The raw sensor 3 read is: ");
+  Serial.println(sensor_3_value);
+  Serial.print("The raw sensor 4 read is: ");
+  Serial.println(sensor_4_value);
+
+  sensor_1_value = constrain(sensor_1_value, sensor_1_min_read, sensor_1_max_read);
+  sensor_2_value = constrain(sensor_2_value, sensor_2_min_read, sensor_2_max_read);
+  sensor_3_value = constrain(sensor_3_value, sensor_3_min_read, sensor_3_max_read);
+  sensor_4_value = constrain(sensor_4_value, sensor_4_min_read, sensor_4_max_read);
+
+  sensor_1_value = map(sensor_1_value, sensor_1_min_read, sensor_1_max_read, 0, 5000);
+  sensor_2_value = map(sensor_2_value, sensor_2_min_read, sensor_2_max_read, 0, 5000);
+  sensor_3_value = map(sensor_3_value, sensor_3_min_read, sensor_3_max_read, 0, 5000);
+  sensor_4_value = map(sensor_4_value, sensor_4_min_read, sensor_4_max_read, 0, 5000);
+
+  Serial.print("The adjusted sensor 1 read is: ");
+  Serial.println(sensor_1_value);
+  Serial.print("The adjusted sensor 2 read is: ");
+  Serial.println(sensor_2_value);
+  Serial.print("The adjusted sensor 3 read is: ");
+  Serial.println(sensor_3_value);
+  Serial.print("The adjusted sensor 4 read is: ");
+  Serial.println(sensor_4_value);
+
+  float left_reading = sensor_3_value + sensor_4_value;
+  float right_reading = sensor_1_value + sensor_2_value;
+
+  Wire.beginTransmission(I2C_SLAVE_ADDR);
+
+  if(left_reading > right_reading + 500){
+    // right is much darker than left, so fire left motor to push car right
+    int x = 1;
+    Wire.write((byte)((x & 0x0000FF00) >> 8));    // first byte of x, containing bits 16 to 9
+    Wire.write((byte)(x & 0x000000FF));
+    Serial.println("Code 1 transmitted");
+
+  } else if(right_reading > left_reading + 500){
+    // left is much darker than right, so fire right motor to push car left
+    int x = 2;
+    Wire.write((byte)((x & 0x0000FF00) >> 8));    // first byte of x, containing bits 16 to 9
+    Wire.write((byte)(x & 0x000000FF));   
+    Serial.println("Code 2 transmitted");
+
+  } else{
+    // fire both motors
+    int x = 3;
+    Wire.write((byte)((x & 0x0000FF00) >> 8));    // first byte of x, containing bits 16 to 9
+    Wire.write((byte)(x & 0x000000FF));
+    Serial.println("Code 3 transmitted");
+
+  }
+
+  Wire.endTransmission();
+
+  delay(100);
+
+}
+
+float getAverageReading(int sensor_pin, int no_reads) {
+  float average_read = 0;
+  int i;
+
+  for (i=0; i<no_reads; i++){
+    average_read += analogRead(sensor_pin);
+    delay(50);
+  }
+
+  return average_read/no_reads;
+}
