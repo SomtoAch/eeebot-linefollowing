@@ -1,0 +1,175 @@
+// define variables and pins, import libraries
+#include <Wire.h>
+#include <ESP32Servo.h>
+#define I2C_SLAVE_ADDR 0x04 // this code will put the microcontroller at address 4
+
+Servo steeringServo;
+
+// control the speed of the wheels
+#define enA 33  // enableA command line
+#define enB 25  // enableB command line
+
+// control the direction of the wheels rotation ( signals to encoder pins )
+#define INa 26  // channel A direction
+#define INb 27  // channel A direction
+#define INc 14  // channel B direction
+#define INd 12  // channel B direction
+
+int steeringAngle = 113;    // variable to store the servo position
+// servo connected to GPIO pin 13
+const int servoPin = 13;
+
+// setting PWM properties
+const int freq = 2000;
+const int ledChannela = 11;  // the ESP32 servo library uses the PWM channel 0 by default, hence the motor channels start from 1
+const int ledChannelb = 12;
+const int resolution = 8;
+
+int code;
+
+void setup()
+{
+  // put your setup code here, to run once:
+
+  // initialise serial communication at 9600 baud
+  Serial.begin(115200);
+  Wire.begin(I2C_SLAVE_ADDR);
+
+  Serial.println("here");
+
+  Wire.onReceive(onReceive);
+
+  // configure the LED PWM functionalitites and attach the GPIO to be controlled - ensure that this is done before the servo channel is attached
+  ledcAttachChannel(enA, freq, resolution, ledChannela);
+  ledcAttachChannel(enB, freq, resolution, ledChannelb);
+
+  // allow allocation of all timers
+	ESP32PWM::allocateTimer(0);
+	ESP32PWM::allocateTimer(1);
+	ESP32PWM::allocateTimer(2);
+	ESP32PWM::allocateTimer(3);
+	steeringServo.setPeriodHertz(50);    // standard 50Hz servo
+	steeringServo.attach(servoPin, 500, 2400);   // attaches the servo to the pin using min/max pulse widths of 500us and 2400us
+
+  Serial.println("1");
+
+  // set encoder connected pins as outputs
+  pinMode(INa, OUTPUT);
+  pinMode(INb, OUTPUT);
+  pinMode(INc, OUTPUT);
+  pinMode(INd, OUTPUT);
+
+
+  ledcWrite(enA, 215);
+  ledcWrite(enB, 160);
+  delay(25);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  delay(100);
+}
+
+void onReceive(int howMany){
+  if(howMany != 2)  // for 2 16-bit numbers, the data will be 4 bytes long - anything else is an error
+  {
+    emptyBuffer();
+    return;
+  }
+
+  int16_t x = 0;
+  uint8_t x16_9 = Wire.read();  // receive bits 16 to 9 of code (one byte)
+  uint8_t x8_1 = Wire.read();   // receive bits 8 to 1 of code (one byte)
+
+  x = (x16_9 << 8) | x8_1; // combine the two bytes into a 16 bit number
+
+  if(x==code){
+    return;
+  }
+
+  code=x;
+
+  if (x==1){
+    Serial.println("Code 1 received");
+    pushRight100();
+  } else if (x==2){
+    Serial.println("Code 2 received");
+    pushLeft100();
+  } else if (x==3){
+    Serial.println("Code 3 received");
+    goForwards100();
+  } else{
+    Serial.println("invalid code received");
+  }
+}
+
+// function to clear the I2C buffer
+void emptyBuffer(void)
+{
+  Serial.println("Error: I2C Byte Size Mismatch");
+  while(Wire.available())
+  {
+    Wire.read();
+  }
+}
+
+void pushRight100(){
+  Serial.println("Pushing right");
+
+  digitalWrite(INa, HIGH); // A AND B CONTROL LEFT WHEEL, high low = forwards, but this is reversed for c and d
+  digitalWrite(INb, LOW);
+  digitalWrite(INc, LOW);
+  digitalWrite(INd, LOW);
+
+  // delay(400);
+
+  // digitalWrite(INa, LOW);
+  // digitalWrite(INb, LOW);
+}
+
+void pushLeft100(){
+  Serial.println("Pushing left");
+
+  digitalWrite(INa, LOW);
+  digitalWrite(INb, LOW);
+  digitalWrite(INc, LOW);
+  digitalWrite(INd, HIGH);
+
+  // delay(400);
+
+  // digitalWrite(INc, LOW);
+  // digitalWrite(INd, LOW);
+}
+
+void setSteering() {
+
+  for (steeringAngle = 112; steeringAngle < 202; steeringAngle += 1) {   // goes from 112 degrees to 202 degrees in steps of 1 degree
+		steeringServo.write(steeringAngle);                                 // tell servo to go to position in variable 'steeringAngle' ie current -> 202
+		delay(15);                                                          // waits 15ms for the servo to reach the position
+	}
+	for (steeringAngle = 202; steeringAngle >= 113; steeringAngle -= 1) {   // goes from 202 degrees to 112 degrees
+		steeringServo.write(steeringAngle);                                 // tell servo to go to position in variable 'steeringAngle' ie  current -> 112
+		delay(15);                                                          // waits 15ms for the servo to reach the position
+	}
+}
+
+void goForwards100() {
+  Serial.println("Moving forward");
+
+  digitalWrite(INa, LOW); // A AND B CONTROL LEFT WHEEL, high low = forwards, but this is reversed for c and d
+  digitalWrite(INb, LOW);
+  digitalWrite(INc, LOW);
+  digitalWrite(INd, LOW);
+
+  digitalWrite(INa, HIGH); // A AND B CONTROL LEFT WHEEL, high low = forwards, but this is reversed for c and d
+  digitalWrite(INb, LOW);
+  digitalWrite(INc, LOW);
+  digitalWrite(INd, HIGH);
+
+  // delay(1000);
+
+  // digitalWrite(INa, LOW); // A AND B CONTROL LEFT WHEEL, high low = forwards, but this is reversed for c and d
+  // digitalWrite(INb, LOW);
+  // digitalWrite(INc, LOW);
+  // digitalWrite(INd, LOW);  
+}
